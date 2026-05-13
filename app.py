@@ -267,9 +267,9 @@ with tab2:
         tdf.style
            .format({c:"{:,.0f}" for c in ["Revenue (EGP)","Orders","Views","AOV (EGP)","SKUs"]})
            .format({c:"{:.2f}%" for c in ["CVR %","Cart Rate %","Rev Share %"]})
-           .background_gradient(subset=["Revenue (EGP)"], cmap="Oranges")
-           .background_gradient(subset=["CVR %"],         cmap="Greens")
-           .background_gradient(subset=["AOV (EGP)"],     cmap="Blues"),
+           
+           
+           ,
         use_container_width=True, height=480,
     )
     st.markdown("---")
@@ -357,7 +357,7 @@ with tab4:
     st.dataframe(
         sdf.style
            .format({"cvr_pct":"{:.2f}%","revenue":"{:,.0f}","orders":"{:,.0f}","aov":"{:,.0f}","views":"{:,.0f}"})
-           .background_gradient(subset=["cvr_pct"], cmap="RdYlGn"),
+           ,
         use_container_width=True, height=420,
     )
     st.markdown("---")
@@ -418,9 +418,9 @@ with tab5:
         disp.style
             .format({"revenue":"EGP {:,.0f}","aov":"EGP {:,.0f}","cvr_orders":"{:.4f}",
                      "views":"{:,.0f}","cart":"{:,.0f}","checkout":"{:,.0f}","orders":"{:,.0f}"})
-            .background_gradient(subset=["revenue"],    cmap="Oranges")
-            .background_gradient(subset=["orders"],     cmap="Greens")
-            .background_gradient(subset=["cvr_orders"], cmap="Blues"),
+            
+            
+            ,
         use_container_width=True, height=520,
     )
     st.markdown("---")
