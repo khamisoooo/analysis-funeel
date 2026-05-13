@@ -68,6 +68,91 @@ def apply_theme(fig, **kwargs):
     fig.update_layout(**{**PLOT_LAYOUT, **kwargs})
     return fig
 
+import threading
+import requests as _req
+from pathlib import Path as _Path
+from datetime import datetime as _dt
+
+# ── Telegram Watcher (background thread) ─────────
+_BOT_TOKEN  = "8975510425:AAFlKwev--572wlwZPPF98K-GV-CieEaRHU"
+_CHAT_ID    = 806087668
+_CSV_PATH   = _Path("data/ga4_data.csv")
+_BACKUP_DIR = _Path("data/backups")
+_OFFSET_F   = _Path("/tmp/ga4_cache/.tg_offset")
+_BASE       = f"https://api.telegram.org/bot{_BOT_TOKEN}"
+
+_CSV_PATH.parent.mkdir(exist_ok=True)
+_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
+def _send(text):
+    try:
+        _req.post(f"{_BASE}/sendMessage",
+                  json={"chat_id": _CHAT_ID, "text": text, "parse_mode": "Markdown"},
+                  timeout=10)
+    except Exception:
+        pass
+
+def _get_offset():
+    try: return int(_OFFSET_F.read_text()) if _OFFSET_F.exists() else 0
+    except: return 0
+
+def _set_offset(n): _OFFSET_F.write_text(str(n))
+
+def _download(file_id):
+    r = _req.get(f"{_BASE}/getFile", params={"file_id": file_id}, timeout=10)
+    fp = r.json()["result"]["file_path"]
+    return _req.get(f"https://api.telegram.org/file/bot{_BOT_TOKEN}/{fp}", timeout=60).content
+
+def _watcher():
+    _send("✅ *GA4 Dashboard is live!*\nForward me the daily CSV and the dashboard updates automatically.\n\n/status — last file info")
+    while True:
+        try:
+            r = _req.get(f"{_BASE}/getUpdates",
+                         params={"offset": _get_offset(), "timeout": 30},
+                         timeout=40)
+            for upd in r.json().get("result", []):
+                _set_offset(upd["update_id"] + 1)
+                msg = upd.get("message", {})
+                if not msg or msg.get("chat", {}).get("id") != _CHAT_ID:
+                    continue
+
+                doc = msg.get("document")
+                if doc:
+                    fname = doc.get("file_name", "file")
+                    if not fname.lower().endswith((".csv", ".xlsx", ".xls")):
+                        _send(f"⚠️ Unsupported: `{fname}` — please send CSV or Excel.")
+                        continue
+                    _send(f"📥 Received: `{fname}` — saving...")
+                    try:
+                        content = _download(doc["file_id"])
+                        _CSV_PATH.write_bytes(content)
+                        ts = _dt.now().strftime("%Y%m%d_%H%M%S")
+                        (_BACKUP_DIR / f"{ts}_{fname}").write_bytes(content)
+                        _send(f"✅ *Dashboard updated!*\n📄 `{fname}`\n📦 `{len(content)/1024:,.0f} KB`\n🕐 `{_dt.now().strftime('%Y-%m-%d %H:%M')}`")
+                    except Exception as e:
+                        _send(f"❌ Failed: `{e}`")
+
+                elif msg.get("text"):
+                    cmd = msg["text"].strip()
+                    if cmd in ("/start", "/help"):
+                        _send("👋 *GA4 Bot*\nForward me the daily CSV file.\n/status — last file info")
+                    elif cmd == "/status":
+                        if _CSV_PATH.exists():
+                            mtime = _dt.fromtimestamp(_CSV_PATH.stat().st_mtime)
+                            size  = _CSV_PATH.stat().st_size / 1024
+                            _send(f"📊 *Last update:*\n📅 `{mtime.strftime('%Y-%m-%d %H:%M')}`\n📦 `{size:,.0f} KB`")
+                        else:
+                            _send("❌ No file received yet.")
+        except Exception:
+            import time; time.sleep(10)
+
+# Start watcher once per Streamlit process
+if "tg_watcher_started" not in st.session_state:
+    st.session_state["tg_watcher_started"] = True
+    t = threading.Thread(target=_watcher, daemon=True)
+    t.start()
+
+
 import os, hashlib, pickle, pathlib
 
 CACHE_DIR = pathlib.Path("/tmp/ga4_cache")
