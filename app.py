@@ -68,6 +68,13 @@ def apply_theme(fig, **kwargs):
     fig.update_layout(**{**PLOT_LAYOUT, **kwargs})
     return fig
 
+import os, hashlib, pickle, pathlib
+
+CACHE_DIR = pathlib.Path("/tmp/ga4_cache")
+CACHE_DIR.mkdir(exist_ok=True)
+META_FILE  = CACHE_DIR / "meta.pkl"
+DATA_FILE  = CACHE_DIR / "data.pkl"
+
 @st.cache_data(show_spinner="Processing data...")
 def process_file(file_bytes: bytes):
     df  = load_data(io.BytesIO(file_bytes))
@@ -78,9 +85,24 @@ def process_file(file_bytes: bytes):
         top_products(df, top_n=50), cvr_segments(cat),
     )
 
-# ════════════════════════════════════════════════
-# STEP 1 — Uploader in sidebar (NO st.stop inside with block)
-# ════════════════════════════════════════════════
+def save_to_disk(raw: bytes, name: str):
+    """Persist uploaded file to /tmp so it survives session_state resets."""
+    DATA_FILE.write_bytes(raw)
+    META_FILE.write_bytes(pickle.dumps({"name": name, "size": len(raw)}))
+
+def load_from_disk():
+    """Return (bytes, name) if a previously uploaded file exists on disk."""
+    if DATA_FILE.exists() and META_FILE.exists():
+        try:
+            meta = pickle.loads(META_FILE.read_bytes())
+            raw  = DATA_FILE.read_bytes()
+            if raw:
+                return raw, meta["name"]
+        except Exception:
+            pass
+    return None, None
+
+# ── SIDEBAR: uploader ────────────────────────────
 with st.sidebar:
     st.markdown("## 📊 GA4 Dashboard")
     st.markdown("---")
@@ -92,16 +114,21 @@ with st.sidebar:
              "Items added to cart, Items checked out, orders_count, qty, revenue, conversion_rate_orders",
     )
 
-    # Save to session_state whenever a new file is uploaded
     if uploaded_file is not None:
         raw = uploaded_file.read()
-        if raw:                                         # guard against empty reads
+        if raw:
+            save_to_disk(raw, uploaded_file.name)
             st.session_state["file_bytes"] = raw
             st.session_state["file_name"]  = uploaded_file.name
 
-# ════════════════════════════════════════════════
-# STEP 2 — Guard outside sidebar (safe to st.stop here)
-# ════════════════════════════════════════════════
+# ── Restore from disk if session_state was cleared ──
+if "file_bytes" not in st.session_state:
+    raw, name = load_from_disk()
+    if raw:
+        st.session_state["file_bytes"] = raw
+        st.session_state["file_name"]  = name
+
+# ── Guard ────────────────────────────────────────
 if "file_bytes" not in st.session_state:
     st.markdown("""
     <div style="margin-top:80px; text-align:center;">
@@ -117,9 +144,6 @@ if "file_bytes" not in st.session_state:
     """, unsafe_allow_html=True)
     st.stop()
 
-# ════════════════════════════════════════════════
-# STEP 3 — Process data (cached, won't rerun unless file changes)
-# ════════════════════════════════════════════════
 file_bytes = st.session_state["file_bytes"]
 file_name  = st.session_state["file_name"]
 
