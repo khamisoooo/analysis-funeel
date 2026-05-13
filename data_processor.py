@@ -13,8 +13,15 @@ DATA_PATH = Path(__file__).parent / "data" / "ga4_data.csv"
 # ─────────────────────────────────────────────
 # 1. Load & Clean
 # ─────────────────────────────────────────────
-def load_data(path: Path = DATA_PATH) -> pd.DataFrame:
-    df = pd.read_csv(path, encoding="utf-8-sig")
+def load_data(path=DATA_PATH) -> pd.DataFrame:
+    """
+    Accept either a file path (str/Path) or a file-like object
+    (e.g. Streamlit UploadedFile / io.BytesIO).
+    """
+    if hasattr(path, "read"):
+        df = pd.read_csv(path, encoding="utf-8-sig")
+    else:
+        df = pd.read_csv(path, encoding="utf-8-sig")
 
     # Rename columns to snake_case
     df.columns = [
@@ -28,10 +35,10 @@ def load_data(path: Path = DATA_PATH) -> pd.DataFrame:
     df[num_cols] = df[num_cols].apply(pd.to_numeric, errors="coerce").fillna(0)
 
     # Derived fields
-    df["aov"] = np.where(df["orders"] > 0, df["revenue"] / df["orders"], 0)
-    df["cart_rate"]     = np.where(df["views"] > 0, df["cart"]     / df["views"], 0)
-    df["checkout_rate"] = np.where(df["views"] > 0, df["checkout"] / df["views"], 0)
-    df["order_rate"]    = np.where(df["views"] > 0, df["orders"]   / df["views"], 0)
+    df["aov"]           = np.where(df["orders"] > 0, df["revenue"] / df["orders"], 0)
+    df["cart_rate"]     = np.where(df["views"]  > 0, df["cart"]     / df["views"], 0)
+    df["checkout_rate"] = np.where(df["views"]  > 0, df["checkout"] / df["views"], 0)
+    df["order_rate"]    = np.where(df["views"]  > 0, df["orders"]   / df["views"], 0)
 
     return df
 
@@ -48,19 +55,19 @@ def kpi_summary(df: pd.DataFrame) -> dict:
     total_qty      = df["qty"].sum()
 
     return {
-        "total_revenue":    round(total_revenue, 2),
-        "total_orders":     int(total_orders),
-        "total_views":      int(total_views),
-        "total_cart":       int(total_cart),
-        "total_checkout":   int(total_checkout),
-        "total_qty":        int(total_qty),
-        "aov":              round(total_revenue / total_orders, 2) if total_orders else 0,
-        "cvr_view_order":   round(total_orders / total_views * 100, 3) if total_views else 0,
-        "cvr_view_cart":    round(total_cart / total_views * 100, 2) if total_views else 0,
-        "cvr_cart_checkout":round(total_checkout / total_cart * 100, 2) if total_cart else 0,
-        "cvr_checkout_order":round(total_orders / total_checkout * 100, 2) if total_checkout else 0,
-        "skus_total":       len(df),
-        "skus_with_revenue":int((df["revenue"] > 0).sum()),
+        "total_revenue":      round(total_revenue, 2),
+        "total_orders":       int(total_orders),
+        "total_views":        int(total_views),
+        "total_cart":         int(total_cart),
+        "total_checkout":     int(total_checkout),
+        "total_qty":          int(total_qty),
+        "aov":                round(total_revenue / total_orders, 2) if total_orders else 0,
+        "cvr_view_order":     round(total_orders   / total_views    * 100, 3) if total_views    else 0,
+        "cvr_view_cart":      round(total_cart     / total_views    * 100, 2) if total_views    else 0,
+        "cvr_cart_checkout":  round(total_checkout / total_cart     * 100, 2) if total_cart     else 0,
+        "cvr_checkout_order": round(total_orders   / total_checkout * 100, 2) if total_checkout else 0,
+        "skus_total":         len(df),
+        "skus_with_revenue":  int((df["revenue"] > 0).sum()),
     }
 
 
@@ -77,10 +84,10 @@ def category_agg(df: pd.DataFrame, top_n: int = 20) -> pd.DataFrame:
         qty=("qty", "sum"),
         sku_count=("sku", "count"),
     )
-    g["aov"]          = (g["revenue"] / g["orders"]).replace([np.inf, np.nan], 0).round(0)
-    g["cvr_pct"]      = (g["orders"] / g["views"] * 100).replace([np.inf, np.nan], 0).round(3)
-    g["cart_rate_pct"]= (g["cart"] / g["views"] * 100).replace([np.inf, np.nan], 0).round(2)
-    g["rev_share_pct"]= (g["revenue"] / g["revenue"].sum() * 100).round(2)
+    g["aov"]           = (g["revenue"] / g["orders"]).replace([np.inf, np.nan], 0).round(0)
+    g["cvr_pct"]       = (g["orders"]  / g["views"] * 100).replace([np.inf, np.nan], 0).round(3)
+    g["cart_rate_pct"] = (g["cart"]    / g["views"] * 100).replace([np.inf, np.nan], 0).round(2)
+    g["rev_share_pct"] = (g["revenue"] / g["revenue"].sum() * 100).round(2)
     g = g.sort_values("revenue", ascending=False)
     return g.head(top_n).reset_index(drop=True)
 
@@ -97,8 +104,8 @@ def seller_agg(df: pd.DataFrame) -> pd.DataFrame:
         checkout=("checkout", "sum"),
         sku_count=("sku", "count"),
     )
-    g["aov"]     = (g["revenue"] / g["orders"]).replace([np.inf, np.nan], 0).round(0)
-    g["cvr_pct"] = (g["orders"] / g["views"] * 100).replace([np.inf, np.nan], 0).round(3)
+    g["aov"]           = (g["revenue"] / g["orders"]).replace([np.inf, np.nan], 0).round(0)
+    g["cvr_pct"]       = (g["orders"]  / g["views"] * 100).replace([np.inf, np.nan], 0).round(3)
     g["rev_share_pct"] = (g["revenue"] / g["revenue"].sum() * 100).round(1)
     return g
 
@@ -113,7 +120,7 @@ def lang_agg(df: pd.DataFrame) -> pd.DataFrame:
         views=("views", "sum"),
     )
     g["aov"]           = (g["revenue"] / g["orders"]).replace([np.inf, np.nan], 0).round(0)
-    g["cvr_pct"]       = (g["orders"] / g["views"] * 100).replace([np.inf, np.nan], 0).round(3)
+    g["cvr_pct"]       = (g["orders"]  / g["views"] * 100).replace([np.inf, np.nan], 0).round(3)
     g["rev_share_pct"] = (g["revenue"] / g["revenue"].sum() * 100).round(1)
     return g.sort_values("revenue", ascending=False)
 
@@ -155,9 +162,9 @@ def top_products(df: pd.DataFrame, by: str = "revenue", top_n: int = 20) -> pd.D
 def cvr_segments(cat_df: pd.DataFrame) -> pd.DataFrame:
     """Label categories by CVR tier."""
     def tier(cvr):
-        if cvr >= 1.0:   return "🟢 High (≥1%)"
-        if cvr >= 0.5:   return "🟡 Medium (0.5–1%)"
-        if cvr >= 0.25:  return "🟠 Low (0.25–0.5%)"
+        if cvr >= 1.0:  return "🟢 High (≥1%)"
+        if cvr >= 0.5:  return "🟡 Medium (0.5–1%)"
+        if cvr >= 0.25: return "🟠 Low (0.25–0.5%)"
         return "🔴 Very Low (<0.25%)"
 
     out = cat_df.copy()
@@ -166,10 +173,10 @@ def cvr_segments(cat_df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────
-# CLI: print a quick summary
+# CLI: python data_processor.py
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
-    df = load_data()
+    df  = load_data()
     kpi = kpi_summary(df)
 
     print("\n" + "=" * 50)
